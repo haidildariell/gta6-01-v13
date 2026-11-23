@@ -1,246 +1,145 @@
-// shots.js — the four hand-in scenes, staged deterministically from the seed
-// and rendered by the game's own renderers (the same drawRoadScene, world
-// renderer, HUD and pause screen the player sees). ?shot=cover|market|race|map
-// picks the scene; the kit's shots.json names the files in order.
+// Staged screenshot scenes behind ?shot=cover|market|race|map. Each one
+// poses the real game state — the same units, traffic, job and HUD the
+// player sees — at a deterministic moment, so the contact sheet is honest
+// gameplay, framed the way the spec demands.
 
-import { PALETTES, CAR_MODELS, WEAPONS, DIALOG_LINES } from './config.js';
-import { drawRoadScene, drawHelicopter, drawSpotlightCone } from './render3d.js';
-import { drawWorld2D, drawPerson, drawTracer } from './render2d.js';
-import { drawHUD, drawPauseScreen } from './hud.js';
-import { PORTRAITS } from './game.js';
-import { WORLD } from './config.js';
+import { SEG_LEN } from './city.js';
+import { RACES, UNIT_ROLES } from './config.js';
 
-const SHORT = { fists: 'FISTS', bat: 'BAT', p9: 'P9', mako: 'MAKO', breaker: '12G', carbine: 'AR' };
-const AMMO = { fists: '∞', bat: '∞', p9: '84', mako: '171', breaker: '24', carbine: '126' };
+function stagedTraffic(game, list) {
+  game.cars = list.map(([ahead, offset, color]) => ({
+    z: game.position + ahead, offset, speed: 4200, color, kind: 'car', plate: 'BRASA',
+  }));
+}
 
-function fullLocker(idx) {
-  return {
-    weapons: WEAPONS.map((w) => ({ ...w, short: SHORT[w.id], ammoText: AMMO[w.id] })),
-    weaponIdx: idx,
+function stagedUnits(game, list) {
+  game.units = list.map(([ahead, offset, role], i) => ({
+    id: `BBPD-${i + 1}`, role: role || UNIT_ROLES[i % UNIT_ROLES.length],
+    z: game.position + ahead, offset, speed: 0, roleT: 3,
+  }));
+}
+
+function stageCover(game) {
+  game.mode = 'drive';
+  game.position = SEG_LEN * 34;
+  game.playerX = 0.06;
+  game.speed = 9796; // 176 km/h on the dash
+  game.condition = 92;
+  game.nitro = 0.7;
+  game.heat = 400; // 4 stars: dispatch + FALCON
+  game.time = 2.3;
+  game.heroScale = 1.45; // the Regent GT towers over the lower centre frame
+  stagedUnits(game, [
+    [1700, -0.34, 'RAMMING'], [1750, 0.36, 'FLANKING'], [2700, -0.05, 'PURSUIT'],
+    [3900, 0.28, 'PURSUIT'], [5600, -0.38, 'INTERCEPT'], [7900, 0.14, 'ROADBLOCK'],
+    [10000, -0.18, 'SPIKES'], [12600, 0.42, 'BACKUP'], [15800, 0, 'SPOTLIGHT'],
+  ]);
+  stagedTraffic(game, [
+    [4200, 0.52, '#3a86ff'], [5600, -0.5, '#ffd23f'], [8100, 0.18, '#e8e8e8'],
+    [10800, -0.24, '#d64541'], [13900, 0.55, '#8ac926'], [17500, -0.52, '#00b4d8'],
+    [21400, 0.3, '#f15bb5'],
+  ]);
+  game.say('vera', 999);
+}
+
+function stageMarket(game) {
+  game.jobIndex = 2; // JOB 3/10 — MARKET STATIC
+  game.stage = 1;
+  game.setObjective();
+  game.stageKind = 'foot';
+  game.enterFoot();
+  const f = game.foot;
+  f.x = 7600;
+  f.camX = f.x - 430; // Dario sits left-of-centre; the fight opens to the right
+  f.hp = 0.82;
+  game.hp = 0.82;
+  game.armour = 0.55;
+  game.heat = 200;
+  game.weaponSel = 3; // Mako SMG in hand
+  game.time = 3.1;
+  // Stalls staged INTO the frame (the live street spaces them 1750 apart).
+  f.stalls = [-520, -60, 430, 920].map((off, i) => ({
+    x: f.x + off, color: ['#e63946', '#f4a261', '#2a9d8f', '#e9c46a'][i],
+    sign: ['FRUTA', 'MARISCOS', 'CAFE SOL', 'TEXTILES'][i], variant: i + 2,
+  }));
+  f.enemies = [
+    { x: 7600 + 360, lane: 0, shirt: '#23262e', skin: '#c68642', pants: '#101014', aim: Math.PI, hp: 30, flash: 0.05, down: false, fireT: 1 },
+    { x: 7600 + 520, lane: 1, shirt: '#3a2323', skin: '#8d5524', pants: '#101014', aim: Math.PI, hp: 0, flash: 0, down: true, fireT: 1 },
+    { x: 7600 + 600, lane: 0, shirt: '#1f2733', skin: '#f1c27d', pants: '#101014', aim: Math.PI, hp: 44, flash: 0, down: false, fireT: 1 },
+  ];
+  // A full market crowd packed around the fight: stallholders, shoppers
+  // fleeing both ways, two kids behind a counter.
+  f.crowd = [-400, -320, -245, -165, -85, 90, 170, 250, 320, 560, 640, 700].map((off, i) => ({
+    x: 7600 + off, lane: i % 2, shirt: ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#f78c6b', '#e0aaff'][i % 6],
+    skin: ['#f1c27d', '#e0ac69', '#c68642', '#8d5524'][i % 4], pants: '#26232b', aim: null, run: i * 1.3, vx: i % 2 ? 26 : -22,
+  }));
+  f.targetX = 7600 + 1600; // marker waits past the last gunman
+  const gy = game.h * 0.94 - 168 * 0.72;
+  const px = f.x - f.camX;
+  f.tracers = [
+    { x1: px + 34, y1: gy, x2: px + 360 - 30, y2: gy - 8, ttl: 99 },
+    { x1: px + 34, y1: gy + 5, x2: px + 520, y2: gy + 30, ttl: 99 },
+    { x1: px + 360 - 30, y1: gy, x2: px + 60, y2: gy - 30, ttl: 99 },
+    { x1: px + 600 - 30, y1: gy - 4, x2: px + 300, y2: gy + 12, ttl: 99 },
+  ];
+  f.flash = 0.05;
+  game.message = null; // the enterFoot toast has no place in the staged frame
+  game.messageT = 0;
+  stagedUnits(game, [
+    [0, 0, 'PURSUIT'], [0, 0, 'RAMMING'], [0, 0, 'FLANKING'], [0, 0, 'BACKUP'], [0, 0, 'TAIL'],
+  ]);
+  // Dispatch distances read from z-gaps; park the units near the market.
+  game.units.forEach((u, i) => { u.z = game.position + 900 + i * 700; });
+  game.dialog = { name: 'Lio Park', role: 'Wheelman', line: 'Market is hot — stay on the stalls, I have the right side!', color: '#ffb703', initials: 'LP' };
+  game.dialogT = 999;
+}
+
+function stageRace(game) {
+  game.mode = 'drive';
+  game.position = SEG_LEN * 398; // Alto Verde descent: a real corner, sunset palette
+  game.playerX = -0.05;
+  game.speed = 10900; // ~196 km/h
+  game.condition = 88;
+  game.nitro = 0.45;
+  game.heat = 0;
+  game.units = [];
+  game.time = 1.4;
+  const def = RACES[0];
+  game.race = {
+    def, cp: 4, cpTotal: def.checkpoints, t: 754,
+    nextZ: game.position + 1750,
+    rivals: [
+      { progress: 415000, speed: 9200, color: '#3a86ff', offset: -0.44, z: game.position + 1500 },
+      { progress: 388000, speed: 8900, color: '#ffd23f', offset: 0.42, z: game.position + 1750 },
+      { progress: 372000, speed: 8600, color: '#f15bb5', offset: 0.05, z: game.position + 2600 },
+    ],
+    finished: false,
   };
+  stagedTraffic(game, [
+    [5200, -0.52, '#e8e8e8'], [8600, 0.5, '#d64541'], [12300, -0.2, '#00b4d8'],
+  ]);
+  game.dialog = null;
 }
 
-function palmRow(actors, zFrom, zTo, step, seedShift) {
-  const greens = ['#2e7d4f', '#35945e', '#27703f'];
-  let i = 0;
-  for (let z = zFrom; z <= zTo; z += step) {
-    actors.push({ kind: 'palm', z, lane: -1.2 - (i % 3) * 0.07, s: 0.9 + ((i * 37 + seedShift) % 40) / 100, green: greens[i % 3] });
-    actors.push({ kind: 'palm', z: z + step * 0.5, lane: 1.19 + (i % 2) * 0.08, s: 0.85 + ((i * 53 + seedShift) % 35) / 100, green: greens[(i + 1) % 3] });
-    i++;
-  }
+function stageMap(game) {
+  game.mode = 'map';
+  game.prevMode = 'drive';
+  game.position = SEG_LEN * 34;
+  game.heat = 200;
+  stagedUnits(game, [
+    [2600, 0.2, 'PURSUIT'], [5400, -0.3, 'RAMMING'], [9100, 0.1, 'FLANKING'], [13800, 0, 'BACKUP'],
+  ]);
+  game.saves = [
+    { label: 'Job 6/10 — Regent Run', detail: '$12,480 · Respect 5' },
+    { label: 'Job 3/10 — Market Static', detail: '$6,215 · Respect 4' },
+    null,
+  ];
+  game.dialog = null;
 }
 
-function sidewalkCrowd(actors, seedShift) {
-  const shirts = ['#ef476f', '#ffd23f', '#06d6a0', '#3fa7d6', '#ff9f1c', '#e8e4da'];
-  const spots = [
-    [430, -1.1], [620, 1.12], [760, -1.16], [980, 1.09], [1240, -1.12], [1490, 1.15],
-    [1730, -1.09], [1980, 1.12], [2260, -1.14], [2540, 1.1], [2900, -1.11], [3300, 1.13],
-  ];
-  spots.forEach(([z, lane], i) => {
-    actors.push({ kind: 'ped', z, lane, shirt: shirts[(i + seedShift) % shirts.length], pants: '#22304a', skin: '#c98d64' });
-  });
-}
-
-export function stageShot(ctx, game, name, w, h) {
-  if (name === 'cover') return shotCover(ctx, game, w, h);
-  if (name === 'market') return shotMarket(ctx, game, w, h);
-  if (name === 'race') return shotRace(ctx, game, w, h);
-  return shotMap(ctx, game, w, h);
-}
-
-function shotCover(ctx, game, w, h) {
-  const pal = PALETTES.golden;
-  const regent = CAR_MODELS[0];
-  const police = CAR_MODELS.find((m) => m.id === 'police');
-  const police2 = CAR_MODELS.find((m) => m.id === 'police2');
-  const actors = [
-    { kind: 'car', z: 40, lane: 0.05, model: regent, spoiler: true, widthF: 0.3 },
-    { kind: 'police', z: 215, lane: -0.55, model: police, flashPhase: true, widthF: 0.26 },
-    { kind: 'police', z: 290, lane: 0.6, model: police2, flashPhase: false, widthF: 0.26 },
-    { kind: 'police', z: 430, lane: -0.28, model: police, flashPhase: false, widthF: 0.25 },
-    { kind: 'police', z: 540, lane: 0.3, model: police2, flashPhase: true, widthF: 0.25 },
-    { kind: 'car', z: 760, lane: -0.38, model: CAR_MODELS[2], brake: true },
-    { kind: 'car', z: 1010, lane: 0.42, model: CAR_MODELS[3] },
-    { kind: 'car', z: 1560, lane: -0.08, model: CAR_MODELS[1], brake: true },
-    { kind: 'car', z: 2150, lane: 0.3, model: CAR_MODELS[4] },
-    { kind: 'car', z: 2900, lane: -0.44, model: CAR_MODELS[5] },
-    { kind: 'car', z: 3700, lane: 0.12, model: CAR_MODELS[2] },
-    { kind: 'building', z: 950, lane: -1.55, w: 1.1, h: 0.85, wall: '#e8cfa3', roof: '#7a4a35', sign: 'HOTEL FARO', seed: 5 },
-    { kind: 'building', z: 1750, lane: -1.6, w: 1.15, h: 1.0, wall: '#d9b48a', roof: '#6e4a35', sign: 'CAFE SOL', seed: 9 },
-    { kind: 'building', z: 2700, lane: -1.55, w: 1.05, h: 0.8, wall: '#b8c4c9', roof: '#4a6e8a', sign: 'CINE BRASA', seed: 3 },
-    { kind: 'building', z: 2500, lane: 1.6, w: 1.1, h: 0.85, wall: '#e0b090', roof: '#97503a', sign: 'CLUB ONDA', seed: 7 },
-    { kind: 'sign', z: 1350, lane: 1.3, text: 'LAS PALMAS' },
-    { kind: 'sign', z: 3150, lane: -1.3, text: 'OLD TOWN →' },
-  ];
-  palmRow(actors, 260, 5200, 360, 3);
-  sidewalkCrowd(actors, 1);
-  drawRoadScene(ctx, w, h, pal, {
-    actors,
-    camX: 0,
-    camZ: 0,
-    curveAt: (z) => Math.sin(z * 0.00032) * 0.55,
-    time: 1.2,
-    seedShift: 11,
-  });
-  // FALCON, large and close, spotlight cone landing on the hero
-  drawSpotlightCone(ctx, w * 0.565, h * 0.17, w * 0.525, h * 0.865, 330);
-  drawHelicopter(ctx, w * 0.565, h * 0.155, 132, { tilt: -0.05 });
-
-  game.jobs.stage = 3;
-  game.jobs.stageFrac = 0.55;
-  const S = game.hudState();
-  Object.assign(S, fullLocker(3));
-  S.mode = 'drive';
-  S.wanted = 4;
-  S.airUnit = true;
-  S.speedKmh = 176;
-  S.carName = 'Regent GT';
-  S.carCond = 82;
-  S.nitroFrac = 0.65;
-  S.hp = 88;
-  S.armour = 57;
-  S.dispatch = [
-    { unit: 'Unit 1', role: 'PURSUIT', dist: 42 },
-    { unit: 'Unit 2', role: 'RAMMING', dist: 18 },
-    { unit: 'Unit 3', role: 'FLANKING', dist: 27 },
-    { unit: 'Unit 4', role: 'PURSUIT', dist: 63 },
-    { unit: 'Unit 5', role: 'ROADBLOCK', dist: 210 },
-    { unit: 'Unit 6', role: 'FLANKING', dist: 35 },
-    { unit: 'Unit 7', role: 'SPIKE STRIP', dist: 148 },
-    { unit: 'Unit 8', role: 'SPOTLIGHT', dist: 12 },
-    { unit: 'Unit 9', role: 'INTERCEPT', dist: 88 },
-  ];
-  S.dialog = { name: 'Vera Quintana', role: 'Fixer', line: DIALOG_LINES.veraChase, ...PORTRAITS.vera };
-  S.showPolice = true;
-  drawHUD(ctx, S, w, h);
-}
-
-function shotMarket(ctx, game, w, h) {
-  const camX = WORLD.seaX - 330;
-  const camY = 1560;
-  // zoom into the firefight so the figures read at contact-sheet size
-  ctx.save();
-  ctx.translate(w / 2, h / 2);
-  ctx.scale(1.45, 1.45);
-  ctx.translate(-w / 2, -h / 2);
-  drawWorld2D(ctx, game.city, { x: camX, y: camY }, w, h, { night: 1, time: 2.4 });
-  const sx = (wx) => wx - camX + w / 2;
-  const sy = (wy) => wy - camY + h / 2;
-  // the firefight: Dario + Lio against the stall crew, Tomas at the flank
-  const dario = { x: camX - 120, y: camY + 90 };
-  const lio = { x: camX - 190, y: camY + 150 };
-  const tomas = { x: camX - 60, y: camY + 190 };
-  const foes = [
-    { x: camX + 130, y: camY - 30, aim: Math.PI * 0.82, muzzle: true },
-    { x: camX + 210, y: camY + 70, aim: Math.PI * 0.95, muzzle: false },
-    { x: camX + 90, y: camY + 160, aim: Math.PI * 1.05, muzzle: true },
-  ];
-  // crowd fleeing between the stalls
-  const crowdSpots = [
-    [-260, -140], [-40, -190], [60, -120], [260, -60], [300, 130], [-300, 40],
-    [-220, -40], [170, 210], [40, 250], [-140, 260], [330, -160], [-330, -200],
-  ];
-  const shirts = ['#ef476f', '#ffd23f', '#06d6a0', '#3fa7d6', '#ff9f1c', '#e8e4da', '#c77dff'];
-  crowdSpots.forEach(([dx, dy], i) => {
-    drawPerson(ctx, sx(camX + dx), sy(camY + dy), { skin: '#c98d64', shirt: shirts[i % shirts.length], pants: '#22304a', walkPhase: i * 1.3, scale: 0.95 });
-  });
-  // one stall guard already down
-  ctx.fillStyle = '#5a1f24';
-  ctx.fillRect(sx(camX + 150) - 12, sy(camY + 30) - 4, 24, 8);
-  drawPerson(ctx, sx(camX + 150), sy(camY + 30), { skin: '#8a5a3b', shirt: '#7a1f24', pants: '#1c1a26', scale: 0.95 });
-  ctx.fillStyle = 'rgba(200,40,40,0.5)';
-  ctx.beginPath();
-  ctx.ellipse(sx(camX + 168), sy(camY + 40), 13, 5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // tracers both ways
-  drawTracer(ctx, sx(dario.x) + 14, sy(dario.y) - 4, sx(foes[0].x), sy(foes[0].y));
-  drawTracer(ctx, sx(lio.x) + 14, sy(lio.y) - 4, sx(foes[1].x), sy(foes[1].y));
-  drawTracer(ctx, sx(foes[0].x) - 14, sy(foes[0].y) - 4, sx(dario.x), sy(dario.y), 'rgba(255,90,77,0.9)');
-  drawTracer(ctx, sx(foes[2].x) - 14, sy(foes[2].y) - 4, sx(tomas.x), sy(tomas.y), 'rgba(255,90,77,0.9)');
-  drawPerson(ctx, sx(dario.x), sy(dario.y), { skin: PORTRAITS.dario.skin, shirt: '#ff7b00', pants: '#22304a', aim: -0.1, weapon: true, muzzle: true, scale: 1.08 });
-  drawPerson(ctx, sx(lio.x), sy(lio.y), { skin: PORTRAITS.lio.skin, shirt: '#ffd23f', pants: '#3a2e28', aim: 0.15, weapon: true, scale: 1.0 });
-  drawPerson(ctx, sx(tomas.x), sy(tomas.y), { skin: PORTRAITS.tomas.skin, shirt: '#06d6a0', pants: '#22304a', aim: -0.4, weapon: true, muzzle: true, scale: 1.0 });
-  for (const f of foes) {
-    drawPerson(ctx, sx(f.x), sy(f.y), { skin: '#8a5a3b', shirt: '#31435f', pants: '#1c1a26', aim: f.aim, weapon: true, muzzle: f.muzzle, scale: 1.0 });
-  }
-  // two BBPD officers arriving at the market edge
-  drawPerson(ctx, sx(camX - 330), sy(camY - 210), { skin: '#f2c29b', shirt: '#22304a', pants: '#14213d', vest: true, aim: 0.5, weapon: true, scale: 1.0 });
-  drawPerson(ctx, sx(camX - 290), sy(camY - 250), { skin: '#c98d64', shirt: '#22304a', pants: '#14213d', vest: true, aim: 0.7, weapon: true, scale: 1.0 });
-  ctx.restore();
-
-  const S = game.hudState();
-  Object.assign(S, fullLocker(3));
-  S.mode = 'foot';
-  S.wanted = 3;
-  S.airUnit = false;
-  S.hp = 76;
-  S.armour = 41;
-  S.mission = { n: 3, title: 'MARKET DAY', stage: 2, stageCount: 3, stageFrac: 0.5, next: 'Shake off the stall crew', giver: 'Vera Quintana', pay: '$1,600', timerSec: null };
-  S.dispatch = [
-    { unit: 'Unit 1', role: 'PURSUIT', dist: 96 },
-    { unit: 'Unit 2', role: 'FLANKING', dist: 121 },
-    { unit: 'Unit 3', role: 'PURSUIT', dist: 154 },
-    { unit: 'Unit 4', role: 'BACKUP', dist: 203 },
-  ];
-  S.dialog = { name: 'Lio Park', role: 'Wheelman', line: 'Market\u2019s hot, Dario — I\u2019ve got the coupe running at the kerb!', ...PORTRAITS.lio };
-  S.playerPos = { x: dario.x, y: dario.y };
-  S.districtName = 'Las Palmas';
-  drawHUD(ctx, S, w, h);
-}
-
-function shotRace(ctx, game, w, h) {
-  const pal = PALETTES.sunset;
-  const regent = CAR_MODELS[0];
-  const actors = [
-    { kind: 'car', z: 40, lane: -0.08, model: regent, spoiler: true, widthF: 0.3, nitro: true },
-    { kind: 'car', z: 300, lane: -0.48, model: CAR_MODELS[1], widthF: 0.27 },
-    { kind: 'car', z: 390, lane: 0.38, model: CAR_MODELS[2], widthF: 0.27, brake: true },
-    { kind: 'car', z: 720, lane: 0.02, model: CAR_MODELS[5], widthF: 0.27 },
-    { kind: 'ring', z: 2050, lane: 0 },
-    { kind: 'car', z: 2400, lane: -0.3, model: CAR_MODELS[3] },
-    { kind: 'building', z: 1100, lane: -1.55, w: 1.1, h: 0.85, wall: '#e8cfa3', roof: '#7a4a35', sign: 'HOTEL FARO', seed: 4 },
-    { kind: 'building', z: 2100, lane: -1.6, w: 1.15, h: 0.95, wall: '#d9b48a', roof: '#6e4a35', sign: 'MARINA BAR', seed: 8 },
-    { kind: 'sign', z: 2400, lane: 1.3, text: 'BOARDWALK' },
-  ];
-  palmRow(actors, 240, 4600, 340, 5);
-  sidewalkCrowd(actors, 2);
-  drawRoadScene(ctx, w, h, pal, {
-    actors,
-    camX: 0,
-    camZ: 0,
-    curveAt: (z) => Math.sin(z * 0.0004 + 1.2) * 0.5,
-    time: 0.7,
-    seedShift: 23,
-  });
-  const S = game.hudState();
-  Object.assign(S, fullLocker(2));
-  S.mode = 'race';
-  S.wanted = 0;
-  S.dispatch = [];
-  S.dialog = null;
-  S.mission = null;
-  S.airUnit = false;
-  S.speedKmh = 214;
-  S.carName = 'Regent GT';
-  S.carCond = 91;
-  S.nitroFrac = 0.42;
-  S.race = { name: 'Boardwalk Blitz', pos: 2, total: 4, cp: 5, cpTotal: 8, timeSec: 96, bestSec: 187 };
-  drawHUD(ctx, S, w, h);
-}
-
-function shotMap(ctx, game, w, h) {
-  const S = game.hudState();
-  S.blips = [
-    { x: game.jobs.target.x, y: game.jobs.target.y, color: '#ffd23f', r: 4.4, label: 'OBJECTIVE' },
-    { x: 2760, y: 620, color: '#06d6a0', r: 4, label: 'VERA\u2019S GARAGE' },
-    { x: 1180, y: 1620, color: '#06d6a0', r: 4, label: 'BRASA ARMS' },
-    { x: 2620, y: 1480, color: '#06d6a0', r: 4, label: 'HILO FINO' },
-    { x: 3050, y: 1900, color: '#ef476f', r: 4, label: 'RACE — BOARDWALK BLITZ' },
-    { x: 3560, y: 340, color: '#3fa7d6', r: 4, label: 'BOAT — MARINA' },
-  ];
-  S.stats = {
-    completion: 50, jobsDone: 5, cashEarnedText: '$96,400', cashText: '$24,580',
-    topSpeed: 287, bustsEscaped: 6, carsJacked: 13, racesWon: 1, playTimeText: '2h 5m',
-  };
-  drawPauseScreen(ctx, S, w, h);
+export function stageShot(name, game) {
+  if (name === 'market') stageMarket(game);
+  else if (name === 'race') stageRace(game);
+  else if (name === 'map') stageMap(game);
+  else stageCover(game);
 }
